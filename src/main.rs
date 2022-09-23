@@ -1,7 +1,130 @@
 use aws_sdk_dynamodb::{Client, Error};
+use std::{collections::HashMap, convert::Infallible, sync::Arc};
+use tokio::sync::RwLock;
+
+#[macro_use]
+extern crate juniper;
+
+use juniper::{EmptySubscription, RootNode};
+
+struct Query;
+
+struct Mutation;
+
+#[graphql_object(context = Context)]
+impl Mutation {
+    async fn add_users(context: &Context, id: String, name: String) -> User {
+        let mut map = context.users.write().await;
+
+        let user = User {
+            id: id.clone(),
+            name: name,
+        };
+
+        map.insert(id, user.clone());
+
+        user
+    }
+}
+
+#[derive(Clone)]
+struct User {
+    id: String,
+    name: String,
+}
+
+#[graphql_object()]
+impl User {
+    fn id(&self) -> String {
+        self.id.clone()
+    }
+    fn name(&self) -> String {
+        self.name.clone()
+    }
+}
+
+use hyper::{
+    server::Server,
+    service::{make_service_fn, service_fn},
+    Method, Response, StatusCode,
+};
+
+struct Context {
+    users: RwLock<HashMap<String, User>>,
+}
+
+impl juniper::Context for Context {}
+
+#[graphql_object(context = Context)]
+impl Query {
+    async fn users(context: &Context) -> Vec<User> {
+        let map = context.users.read().await;
+        map.values().cloned().collect()
+    }
+}
+
+use hyper::Body;
+
+
+/// 
+/// 
+/// read data
+/// query {users{id, name}}
+/// 
+/// create data
+/// mutation {addUsers(id: "user4", name:"denis") {
+///  id
+/// }}
+/// 
 
 #[tokio::main]
 async fn main() -> Result<(), Error> {
+    pretty_env_logger::init();
+    let addr = ([127, 0, 0, 1], 3000).into();
+
+    let root_node = Arc::new(RootNode::new(
+        Query,
+        Mutation,
+        EmptySubscription::<Context>::new(),
+    ));
+
+    let new_service = make_service_fn(move |_| {
+        let root_node = root_node.clone();
+
+        let context = Arc::new(Context {
+            users: RwLock::new(HashMap::new()),
+        });
+
+        let ctx = context.clone();
+
+        async {
+            Ok::<_, hyper::Error>(service_fn(move |req| {
+                let root_node = root_node.clone();
+                let ctx = ctx.clone();
+                async {
+                    Ok::<_, Infallible>(match (req.method(), req.uri().path()) {
+                        (&Method::GET, "/") => juniper_hyper::graphiql("/graphql", None).await,
+                        (&Method::GET, "/graphql") | (&Method::POST, "/graphql") => {
+                            juniper_hyper::graphql(root_node, ctx, req).await
+                        }
+                        _ => {
+                            let mut response = Response::new(Body::empty());
+                            *response.status_mut() = StatusCode::NOT_FOUND;
+                            response
+                        }
+                    })
+                }
+            }))
+        }
+    });
+
+    let server = Server::bind(&addr).serve(new_service);
+    println!("Listening on http://{addr}");
+
+    if let Err(e) = server.await {
+        eprintln!("server error: {e}")
+    }
+
     let config = aws_config::from_env().region("eu-west-1").load().await;
     let client = Client::new(&config);
     println!("Tables:");
@@ -36,7 +159,7 @@ async fn main() -> Result<(), Error> {
         .for_each(|item| println!("{:?}", item));
 
     let stream_client = aws_sdk_dynamodbstreams::Client::new(&config);
-    
+
     let streams = stream_client
         .list_streams()
         .table_name(table)
