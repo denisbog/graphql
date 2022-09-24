@@ -1,13 +1,8 @@
 use aws_sdk_dynamodb::{model::AttributeValue, Client, Error};
 use std::{collections::HashMap, convert::Infallible, sync::Arc};
 use tokio::sync::RwLock;
-#[macro_use]
-extern crate juniper;
 
-#[macro_use]
-extern crate log;
-
-use juniper::{EmptySubscription, RootNode};
+use juniper::{EmptySubscription, RootNode, GraphQLInputObject, GraphQLObject, graphql_object};
 
 struct Query;
 
@@ -74,7 +69,7 @@ impl Query {
 impl Mutation {
     #[graphql(name = "addUserIdName")]
     async fn add_user(context: &Context, id: String, created: String) -> Post {
-        info!("create user by id and name");
+        log::info!("create user by id and name");
         let mut map = context.users.write().await;
         let post: Post = Post {
             id: id,
@@ -85,7 +80,7 @@ impl Mutation {
     }
 
     async fn add_user(context: &Context, post_input: PostInput) -> Post {
-        info!("create user");
+        log::info!("create user");
         let mut map = context.users.write().await;
         let post = Post::from(post_input.clone());
         map.insert(post.id.clone(), post.clone());

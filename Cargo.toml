@@ -3,29 +3,27 @@ name = "graph"
 version = "0.1.0"
 edition = "2021"
 
+[lib]
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
-[[bin]]
-name="load"
-path="src/load.rs"
 
+# [[bin]]
+# name="load"
+# path="src/load.rs"
 
-[[bin]]
-name="index"
-path="src/index.rs"
+# [[bin]]
+# name="index"
+# path="src/index.rs"
 
-
-
-[[bin]]
-name="search"
-path="src/search.rs"
+# [[bin]]
+# name="search"
+# path="src/search.rs"
 
 [dependencies]
 aws-config = "0.49.0"
 aws-sdk-dynamodb = "0.19.0"
 aws-sdk-dynamodbstreams = "0.19.0"
 tokio = { version = "1", features = ["full"] }
-
 juniper = "0.15"
 juniper_hyper = "0.8.0"
 hyper = { version = "0.14", features = ["server", "runtime"] }

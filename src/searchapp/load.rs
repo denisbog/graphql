@@ -1,19 +1,9 @@
 use std::collections::HashMap;
 
 use aws_sdk_dynamodb::{model::AttributeValue, Client};
-use serde::{Deserialize, Serialize};
 use sled::Db;
 
-#[derive(Debug, Serialize, Deserialize)]
-pub struct Post {
-    id: String,
-    address: Option<String>,
-    category: String,
-    subcategory: Option<String>,
-    created: Option<String>,
-    description: Option<String>,
-    title: Option<String>,
-}
+use crate::searchapp::model::Post;
 
 impl From<&HashMap<String, AttributeValue>> for Post {
     fn from(attrs: &HashMap<String, AttributeValue>) -> Self {

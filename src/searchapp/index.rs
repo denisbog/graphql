@@ -1,19 +1,9 @@
-use serde::Deserialize;
 use tantivy::{
     schema::{Schema, FAST, INDEXED, TEXT},
     Index,
 };
 
-#[derive(Debug, Deserialize)]
-pub struct Post {
-    id: String,
-    address: Option<String>,
-    category: String,
-    subcategory: Option<String>,
-    created: Option<String>,
-    description: Option<String>,
-    title: Option<String>,
-}
+use crate::searchapp::model::Post;
 
 #[tokio::main]
 async fn main() {
