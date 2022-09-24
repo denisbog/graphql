@@ -14,4 +14,5 @@ tokio = { version = "1", features = ["full"] }
 juniper = "0.15"
 juniper_hyper = "0.8.0"
 hyper = { version = "0.14", features = ["server", "runtime"] }
+log = "0.4"
 pretty_env_logger = "0.4"

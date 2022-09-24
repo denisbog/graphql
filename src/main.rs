@@ -1,9 +1,11 @@
 use aws_sdk_dynamodb::{Client, Error};
 use std::{collections::HashMap, convert::Infallible, sync::Arc};
 use tokio::sync::RwLock;
-
 #[macro_use]
 extern crate juniper;
+
+#[macro_use]
+extern crate log;
 
 use juniper::{EmptySubscription, RootNode};
 
@@ -11,36 +13,25 @@ struct Query;
 
 struct Mutation;
 
-#[graphql_object(context = Context)]
-impl Mutation {
-    async fn add_users(context: &Context, id: String, name: String) -> User {
-        let mut map = context.users.write().await;
-
-        let user = User {
-            id: id.clone(),
-            name: name,
-        };
-
-        map.insert(id, user.clone());
-
-        user
-    }
-}
-
-#[derive(Clone)]
-struct User {
+#[derive(GraphQLInputObject)]
+struct UserInput {
     id: String,
     name: String,
 }
 
-#[graphql_object()]
-impl User {
-    fn id(&self) -> String {
-        self.id.clone()
+impl From<UserInput> for User {
+    fn from(user_input: UserInput) -> Self {
+        Self {
+            id: user_input.id,
+            name: user_input.name,
+        }
     }
-    fn name(&self) -> String {
-        self.name.clone()
-    }
+}
+
+#[derive(Clone, GraphQLObject)]
+struct User {
+    id: String,
+    name: String,
 }
 
 use hyper::{
@@ -63,19 +54,46 @@ impl Query {
     }
 }
 
+#[graphql_object(context = Context)]
+impl Mutation {
+    #[graphql(name = "addUserIdName")]
+    async fn add_user(context: &Context, id: String, name: String) -> User {
+        info!("create user by id and name");
+        let mut map = context.users.write().await;
+        let user: User = User { id: id, name: name };
+        map.insert(user.id.clone(), user.clone());
+        user
+    }
+
+    async fn add_user(context: &Context, user_input: UserInput) -> User {
+        info!("create user");
+        let mut map = context.users.write().await;
+        let user: User = user_input.into();
+        map.insert(user.id.clone(), user.clone());
+        user
+    }
+}
+
 use hyper::Body;
 
-
-/// 
-/// 
+///
+///
 /// read data
 /// query {users{id, name}}
-/// 
+///
 /// create data
-/// mutation {addUsers(id: "user4", name:"denis") {
+/// mutation {addUserIdName(id: "user4", name:"denis") {
 ///  id
 /// }}
-/// 
+///
+///
+/// mutation {
+///   addUser(userInput: {id: "name", name: "surname"}) {
+///     id
+///   }
+/// }
+///
+///
 
 #[tokio::main]
 async fn main() -> Result<(), Error> {
@@ -87,6 +105,8 @@ async fn main() -> Result<(), Error> {
         Mutation,
         EmptySubscription::<Context>::new(),
     ));
+
+    println!("{}", root_node.as_schema_language());
 
     let new_service = make_service_fn(move |_| {
         let root_node = root_node.clone();
