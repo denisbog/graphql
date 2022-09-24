@@ -1,4 +1,4 @@
-use aws_sdk_dynamodb::{Client, Error};
+use aws_sdk_dynamodb::{model::AttributeValue, Client, Error};
 use std::{collections::HashMap, convert::Infallible, sync::Arc};
 use tokio::sync::RwLock;
 #[macro_use]
@@ -13,25 +13,25 @@ struct Query;
 
 struct Mutation;
 
-#[derive(GraphQLInputObject)]
-struct UserInput {
+#[derive(GraphQLInputObject, Clone)]
+struct PostInput {
     id: String,
-    name: String,
+    created: String,
 }
 
-impl From<UserInput> for User {
-    fn from(user_input: UserInput) -> Self {
+impl From<PostInput> for Post {
+    fn from(user_input: PostInput) -> Self {
         Self {
             id: user_input.id,
-            name: user_input.name,
+            created: user_input.created,
         }
     }
 }
 
-#[derive(Clone, GraphQLObject)]
-struct User {
+#[derive(Clone, GraphQLObject, Debug)]
+struct Post {
     id: String,
-    name: String,
+    created: String,
 }
 
 use hyper::{
@@ -41,36 +41,84 @@ use hyper::{
 };
 
 struct Context {
-    users: RwLock<HashMap<String, User>>,
+    users: RwLock<HashMap<String, Post>>,
+    client: Arc<Client>,
 }
 
 impl juniper::Context for Context {}
 
 #[graphql_object(context = Context)]
 impl Query {
-    async fn users(context: &Context) -> Vec<User> {
+    async fn users(context: &Context) -> Vec<Post> {
         let map = context.users.read().await;
         map.values().cloned().collect()
+    }
+
+    async fn posts(context: &Context) -> Vec<Post> {
+        context
+            .client
+            .scan()
+            .table_name("posts")
+            .send()
+            .await
+            .unwrap()
+            .items()
+            .unwrap()
+            .iter()
+            .map(Post::from)
+            .collect()
     }
 }
 
 #[graphql_object(context = Context)]
 impl Mutation {
     #[graphql(name = "addUserIdName")]
-    async fn add_user(context: &Context, id: String, name: String) -> User {
+    async fn add_user(context: &Context, id: String, created: String) -> Post {
         info!("create user by id and name");
         let mut map = context.users.write().await;
-        let user: User = User { id: id, name: name };
-        map.insert(user.id.clone(), user.clone());
-        user
+        let post: Post = Post {
+            id: id,
+            created: created,
+        };
+        map.insert(post.id.clone(), post.clone());
+        post
     }
 
-    async fn add_user(context: &Context, user_input: UserInput) -> User {
+    async fn add_user(context: &Context, post_input: PostInput) -> Post {
         info!("create user");
         let mut map = context.users.write().await;
-        let user: User = user_input.into();
-        map.insert(user.id.clone(), user.clone());
-        user
+        let post = Post::from(post_input.clone());
+        map.insert(post.id.clone(), post.clone());
+        post
+    }
+
+    async fn add_post(context: &Context, post_input: PostInput) -> Post {
+        context
+            .client
+            .put_item()
+            .table_name("posts")
+            .item("id", AttributeValue::S(post_input.id.clone()))
+            .item("created", AttributeValue::S(post_input.created.clone()))
+            .send()
+            .await
+            .unwrap();
+        Post::from(post_input)
+    }
+
+    async fn delete_post(context: &Context, id: String) -> String {
+        context
+            .client
+            .delete_item()
+            .table_name("posts")
+            .key(
+                "id",
+                aws_sdk_dynamodb::model::AttributeValue::S(id.clone()),
+            )
+            // .key("id", AttributeValue::S(id.clone()))
+            .send()
+            .await
+            .unwrap();
+        id
     }
 }
 
@@ -95,9 +143,23 @@ use hyper::Body;
 ///
 ///
 
+impl From<&HashMap<String, AttributeValue>> for Post {
+    fn from(attrs: &HashMap<String, AttributeValue>) -> Self {
+        Post {
+            id: attrs.get("id").unwrap().as_s().unwrap().to_string(),
+            created: attrs.get("created").unwrap().as_s().unwrap().to_string(),
+        }
+    }
+}
 #[tokio::main]
 async fn main() -> Result<(), Error> {
     pretty_env_logger::init();
+
+    let config = aws_config::from_env().region("eu-west-1").load().await;
+    let client = Client::new(&config);
+
+    let table = "posts";
+
     let addr = ([127, 0, 0, 1], 3000).into();
 
     let root_node = Arc::new(RootNode::new(
@@ -111,16 +173,17 @@ async fn main() -> Result<(), Error> {
     let new_service = make_service_fn(move |_| {
         let root_node = root_node.clone();
 
-        let context = Arc::new(Context {
-            users: RwLock::new(HashMap::new()),
-        });
-
-        let ctx = context.clone();
-
         async {
+            let config = aws_config::from_env().region("eu-west-1").load().await;
+
+            let context = Arc::new(Context {
+                users: RwLock::new(HashMap::new()),
+                client: Arc::new(Client::new(&config)),
+            });
+
             Ok::<_, hyper::Error>(service_fn(move |req| {
                 let root_node = root_node.clone();
-                let ctx = ctx.clone();
+                let ctx = context.clone();
                 async {
                     Ok::<_, Infallible>(match (req.method(), req.uri().path()) {
                         (&Method::GET, "/") => juniper_hyper::graphiql("/graphql", None).await,
@@ -145,8 +208,6 @@ async fn main() -> Result<(), Error> {
         eprintln!("server error: {e}")
     }
 
-    let config = aws_config::from_env().region("eu-west-1").load().await;
-    let client = Client::new(&config);
     println!("Tables:");
 
     client
@@ -159,8 +220,6 @@ async fn main() -> Result<(), Error> {
         .for_each(|table| {
             println!("{:?}", table);
         });
-
-    let table = "posts";
 
     client
         .query()
