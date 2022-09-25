@@ -5,8 +5,7 @@ use tantivy::{
 
 use crate::searchapp::model::Post;
 
-#[tokio::main]
-async fn main() {
+pub async fn index_data_from_local_db() {
     let db = sled::open("sled").expect("open");
 
     let mut schema_builder = Schema::builder();

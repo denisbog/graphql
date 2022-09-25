@@ -1,19 +1,9 @@
-use serde::{Deserialize, Serialize};
 use tantivy::{collector::TopDocs, query::QueryParser, Index, LeasedItem, ReloadPolicy, Searcher};
 
-#[derive(Debug, Serialize, Deserialize)]
-pub struct Post {
-    id: String,
-    address: Option<String>,
-    category: String,
-    subcategory: Option<String>,
-    created: Option<String>,
-    description: Option<String>,
-    title: Option<String>,
-}
+use crate::searchapp::model::Post;
 
 #[tokio::main]
-async fn main() {
+pub async fn search() {
     let dir = tantivy::directory::MmapDirectory::open("index").unwrap();
     let index = Index::open(dir).unwrap();
 
@@ -28,7 +18,7 @@ async fn main() {
         &index,
         vec![index.schema().get_field("description").unwrap()],
     );
-    let results = search(query_parser, searcher, index);
+    let results = search_using_index(query_parser, searcher, index);
 
     let db = sled::open("sled").expect("open");
 
@@ -39,12 +29,14 @@ async fn main() {
         post
     });
     println!("{}", results.len());
-    objects.for_each(|post| {
-        println!("{:?}", post)
-    });
+    objects.for_each(|post| println!("{:?}", post));
 }
 
-fn search(query_parser: QueryParser, searcher: LeasedItem<Searcher>, index: Index) -> Vec<String> {
+pub fn search_using_index(
+    query_parser: QueryParser,
+    searcher: LeasedItem<Searcher>,
+    index: Index,
+) -> Vec<String> {
     let query = query_parser.parse_query("fiat").unwrap();
 
     let query_results = searcher.search(&query, &TopDocs::with_limit(10)).unwrap();

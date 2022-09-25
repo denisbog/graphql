@@ -146,8 +146,7 @@ impl From<&HashMap<String, AttributeValue>> for Post {
         }
     }
 }
-#[tokio::main]
-async fn main() -> Result<(), Error> {
+pub async fn server_local_index_data() -> Result<(), Error> {
     pretty_env_logger::init();
 
     let config = aws_config::from_env().region("eu-west-1").load().await;
