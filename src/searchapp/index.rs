@@ -1,34 +1,16 @@
-use tantivy::{
-    schema::{Schema, FAST, INDEXED, TEXT},
-    Index,
-};
-
 use crate::searchapp::model::Post;
 
+use super::state::{get_index, get_local_db};
+
 pub async fn index_data_from_local_db() {
-    let db = sled::open("sled").expect("open");
+    let index = get_index();
 
-    let mut schema_builder = Schema::builder();
-    let id = schema_builder.add_bytes_field("id", INDEXED | FAST);
-    let address = schema_builder.add_text_field("address", TEXT);
-    let category = schema_builder.add_text_field("category", TEXT);
-    let subcategory = schema_builder.add_text_field("subcategory", TEXT);
-    let created = schema_builder.add_text_field("created", TEXT);
-    let description = schema_builder.add_text_field("description", TEXT);
-    let title = schema_builder.add_text_field("title", TEXT);
+    let mut index_writer = index.writer(20_000_000).unwrap();
 
-    let schema = schema_builder.build();
+    let schema = index.schema();
 
-    // Indexing documents
-    let dir = tantivy::directory::MmapDirectory::open("index").unwrap();
-
-    let index = Index::open_or_create(dir, schema.clone()).unwrap();
-
-    // Here we use a buffer of 100MB that will be split
-    // between indexing threads.
-    let mut index_writer = index.writer(100_000_000).unwrap();
-
-    db.iter()
+    get_local_db()
+        .iter()
         .map(|item| {
             // println!("{}", std::str::from_utf8(&item.unwrap().0).unwrap());
             let post: Post =
@@ -38,28 +20,33 @@ pub async fn index_data_from_local_db() {
         .for_each(|post| {
             let mut document = tantivy::Document::new();
 
-            document.add_bytes(id, post.id);
+            document.add_bytes(schema.get_field("id").unwrap(), post.id);
             if post.address.is_some() {
-                document.add_text(address, post.address.unwrap());
+                document.add_text(schema.get_field("address").unwrap(), post.address.unwrap());
             }
-            
-            document.add_text(category, post.category);
+
+            document.add_text(schema.get_field("category").unwrap(), post.category);
 
             if post.subcategory.is_some() {
-                document.add_text(subcategory, post.subcategory.unwrap());
+                document.add_text(
+                    schema.get_field("subcategory").unwrap(),
+                    post.subcategory.unwrap(),
+                );
             }
             if post.created.is_some() {
-                document.add_text(created, post.created.unwrap());
+                document.add_text(schema.get_field("created").unwrap(), post.created.unwrap());
             }
             if post.description.is_some() {
-                document.add_text(description, post.description.unwrap());
+                document.add_text(
+                    schema.get_field("description").unwrap(),
+                    post.description.unwrap(),
+                );
             }
             if post.title.is_some() {
-                document.add_text(title, post.title.unwrap());
+                document.add_text(schema.get_field("title").unwrap(), post.title.unwrap());
             }
 
             index_writer.add_document(document).unwrap();
         });
-
     index_writer.commit().unwrap();
 }

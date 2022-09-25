@@ -1,6 +1,6 @@
 use tantivy::{collector::TopDocs, query::QueryParser, Index, LeasedItem, ReloadPolicy, Searcher};
 
-use crate::searchapp::model::Post;
+use crate::searchapp::{model::Post, state::get_local_db};
 
 pub fn search_local_index() {
     let dir = tantivy::directory::MmapDirectory::open("index").unwrap();
@@ -19,7 +19,7 @@ pub fn search_local_index() {
     );
     let results = search_using_index(query_parser, searcher, index);
 
-    let db = sled::open("sled").expect("open");
+    let db = get_local_db();
 
     let objects = results.iter().map(|id| {
         let post: Post =
