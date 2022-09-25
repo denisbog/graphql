@@ -2,8 +2,7 @@ use tantivy::{collector::TopDocs, query::QueryParser, Index, LeasedItem, ReloadP
 
 use crate::searchapp::model::Post;
 
-#[tokio::main]
-pub async fn search() {
+pub fn search_local_index() {
     let dir = tantivy::directory::MmapDirectory::open("index").unwrap();
     let index = Index::open(dir).unwrap();
 
@@ -37,7 +36,7 @@ pub fn search_using_index(
     searcher: LeasedItem<Searcher>,
     index: Index,
 ) -> Vec<String> {
-    let query = query_parser.parse_query("fiat").unwrap();
+    let query = query_parser.parse_query("masina").unwrap();
 
     let query_results = searcher.search(&query, &TopDocs::with_limit(10)).unwrap();
 

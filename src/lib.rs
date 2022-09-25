@@ -1,4 +1,6 @@
-use searchapp::{index::index_data_from_local_db, load::load_to_local_db, search, graphql::server_local_index_data};
+use searchapp::{
+    graphql::server_local_index_data, index::index_data_from_local_db, load::load_to_local_db, search::search_local_index,
+};
 
 mod searchapp;
 
@@ -11,7 +13,7 @@ pub async fn index() {
 }
 
 pub async fn search() {
-    searchapp::search::search();
+    search_local_index();
 }
 
 pub async fn server() {
