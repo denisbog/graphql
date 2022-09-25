@@ -2,10 +2,10 @@ use aws_sdk_dynamodb::{model::AttributeValue, Client, Error};
 use std::{collections::HashMap, convert::Infallible, sync::Arc};
 use tokio::sync::RwLock;
 
-use juniper::{graphql_object, EmptySubscription, GraphQLInputObject, GraphQLObject, RootNode};
+use juniper::{graphql_object, EmptySubscription, GraphQLInputObject, RootNode};
 
+use crate::searchapp::state::get_dynamodb_client;
 use hyper::Body;
-use crate::searchapp::state::{get_dynamodb_client};
 struct Query;
 
 struct Mutation;
@@ -18,17 +18,8 @@ struct PostInput {
 
 impl From<PostInput> for Post {
     fn from(user_input: PostInput) -> Self {
-        Self {
-            id: user_input.id,
-            created: user_input.created,
-        }
+        Post::new(user_input.id, user_input.created)
     }
-}
-
-#[derive(Clone, GraphQLObject, Debug)]
-struct Post {
-    id: String,
-    created: String,
 }
 
 use hyper::{
@@ -37,9 +28,13 @@ use hyper::{
     Method, Response, StatusCode,
 };
 
+use super::model::Post;
+use super::search::SearchEngine;
+
 struct Context {
     users: RwLock<HashMap<String, Post>>,
     client: Arc<Client>,
+    search_engine: SearchEngine,
 }
 
 impl juniper::Context for Context {}
@@ -65,6 +60,10 @@ impl Query {
             .map(Post::from)
             .collect()
     }
+
+    async fn search(context: &Context, search: String) -> Vec<Post> {
+        context.search_engine.search(search.as_str())
+    }
 }
 
 #[graphql_object(context = Context)]
@@ -73,10 +72,7 @@ impl Mutation {
     async fn add_user(context: &Context, id: String, created: String) -> Post {
         log::info!("create user by id and name");
         let mut map = context.users.write().await;
-        let post: Post = Post {
-            id: id,
-            created: created,
-        };
+        let post = Post::new(id, created);
         map.insert(post.id.clone(), post.clone());
         post
     }
@@ -116,17 +112,7 @@ impl Mutation {
     }
 }
 
-
-
-impl From<&HashMap<String, AttributeValue>> for Post {
-    fn from(attrs: &HashMap<String, AttributeValue>) -> Self {
-        Post {
-            id: attrs.get("id").unwrap().as_s().unwrap().to_string(),
-            created: attrs.get("created").unwrap().as_s().unwrap().to_string(),
-        }
-    }
-}
-pub async fn server_local_index_data() -> Result<(), Error> {
+pub async fn serve_local_index_data() -> Result<(), Error> {
     pretty_env_logger::init();
     let addr = ([127, 0, 0, 1], 3000).into();
     let root_node = Arc::new(RootNode::new(
@@ -143,6 +129,7 @@ pub async fn server_local_index_data() -> Result<(), Error> {
             let context = Arc::new(Context {
                 users: RwLock::new(HashMap::new()),
                 client: Arc::new(get_dynamodb_client().await),
+                search_engine: SearchEngine::new(),
             });
             Ok::<_, hyper::Error>(service_fn(move |req| {
                 let root_node = root_node.clone();
