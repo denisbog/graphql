@@ -4,7 +4,7 @@ use sled::Db;
 
 use crate::searchapp::model::Post;
 
-async fn store_data_to_local_db(db: &Db, items: &Vec<Post>) {
+async fn store_data_to_local_db(db: &Db, items: &[Post]) {
     items.iter().for_each(|post| {
         db.insert(
             post.id.clone(),

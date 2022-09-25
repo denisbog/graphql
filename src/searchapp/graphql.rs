@@ -104,7 +104,6 @@ impl Mutation {
             .delete_item()
             .table_name("posts")
             .key("id", aws_sdk_dynamodb::model::AttributeValue::S(id.clone()))
-            // .key("id", AttributeValue::S(id.clone()))
             .send()
             .await
             .unwrap();

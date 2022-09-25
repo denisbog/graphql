@@ -49,7 +49,7 @@ pub async fn get_data_from_dynamodb(client: &Client) -> Vec<Post> {
         .items()
         .unwrap()
         .iter()
-        .map(|item| return Post::from(item))
+        .map(Post::from)
         .collect()
 }
 
@@ -103,7 +103,7 @@ pub async fn parse_streams() {
                         println!("{:?}", record);
                         i = 0;
                     });
-                    i = i + 1;
+                    i += 1;
 
                     if i > 10 {
                         break;

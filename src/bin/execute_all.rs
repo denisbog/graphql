@@ -1,5 +1,3 @@
-use graph;
-
 #[tokio::main]
 async fn main () {
     graph::load().await;
