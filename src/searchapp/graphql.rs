@@ -4,6 +4,7 @@ use tokio::sync::RwLock;
 
 use juniper::{graphql_object, EmptySubscription, GraphQLInputObject, RootNode};
 
+use crate::searchapp::search::SearchResults;
 use crate::searchapp::state::get_dynamodb_client;
 use hyper::Body;
 struct Query;
@@ -61,8 +62,10 @@ impl Query {
             .collect()
     }
 
-    async fn search(context: &Context, search: String) -> Vec<Post> {
-        context.search_engine.search(search.as_str())
+    async fn search(context: &Context, search: String, results: i32, offset: i32) -> SearchResults {
+        context
+            .search_engine
+            .search(search.as_str(), usize::try_from(results).unwrap(), usize::try_from(offset).unwrap())
     }
 }
 
